@@ -21,7 +21,7 @@ df = df.drop(df.columns[to_drop], axis=1)  # df.columns is zero-based pd.Index
 
 print(df.head())
 
-df.to_csv('open_close.csv', index=False)
+df.to_csv('data/open_close.csv', index=False)
 
 
 #calculate weekly returns
@@ -41,7 +41,4 @@ weekly_returns = pd.DataFrame(df.apply(calc_returns, axis=1).tolist(), columns=t
 
 print(weekly_returns.head())
 
-weekly_returns.to_csv('weekly_returns.csv', index = False)
-
-
-
+weekly_returns.to_csv('data/weekly_returns.csv', index = False)
