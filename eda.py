@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import math
 
-weekly_returns = pd.read_csv('weekly_returns.csv')
+weekly_returns = pd.read_csv('data/weekly_returns.csv')
 
 tickers = weekly_returns.columns
 
@@ -18,6 +18,6 @@ print(mu_is)
 
 variances.style.format("{:.5f}")
 
-mu_is.to_csv('mu_is.csv', index = False)
+mu_is.to_csv('data/mu_is.csv', index = False)
 
-variances.to_csv('variances.csv', index = False)
+variances.to_csv('data/variances.csv', index = False)
