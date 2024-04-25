@@ -3,7 +3,7 @@ import numpy as np
 import math
 import yfinance as yf
 
-tickers =["XLC", "XLP", "XLY", "XLE", "XLF", "XLV", "XLI", "XLB", "XLK", "XLRE", "XLU"]
+tickers =["NVDA", "JPM", "LLY", "GE", "GBTC"]
 
 df = yf.download(tickers, interval = '1wk', start = '2023-01-01', end = '2023-12-31', group_by = 'ticker')
 

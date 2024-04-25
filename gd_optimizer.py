@@ -34,16 +34,25 @@ def weekly_return(W):
 # weekly returns as close to target
 
 def risk_proxy(W):
-    return 1e5 * sigma_sq(W)
+    return 1e4 * sigma_sq(W)
 
 def regularize(W):
-    return 1e2 * sum((abs(w) for w in W))
+    penalty = 0
+    for w in W:
+        if w < 0:
+            penalty += 1e5 * w**2
+            
+    return penalty
 
 def allocation_penalty(W):
-    return 1e3 * (1 - sum(W))**2
+    s = sum(W)
+    if s < 1:
+        return 1e3 * (1-s)**2
+    else:
+        return 1e5 * (s-1)**2
 
 def weekly_return_penalty(W):
-    return 1e8 * (weekly_return(W) - mu)**2
+    return 1e7 * (weekly_return(W) - mu)**2
 
 def custom_loss(W):
     return risk_proxy(W) + regularize(W) + allocation_penalty(W) + weekly_return_penalty(W)
@@ -57,7 +66,7 @@ iter_counts = []
 num_attempts = 25
 loss_change_threshold = 1e-5 #stop once loss changes by less than 0.01%
 min_iterations = 10
-max_iterations = 100
+max_iterations = 200
 
 rng = np.random.default_rng()
 
@@ -69,9 +78,7 @@ for attempt in range(num_attempts):
 
     #start by randomly setting n-1 weights
     #normal distribution parameter picker: https://www.desmos.com/calculator/jxzs8fz9qr 
-    initial_guess = rng.normal(loc = 1/n, scale = 0.05, size = n-1)
-
-    #TODO change which weight is calculated last because it tends to have the highest magnitude
+    initial_guess = rng.normal(loc = 1/(2*n), scale = 0.1, size = n-1)
 
     #calculate the value of the last weight in order to satisfy W_i * mu_i = mu
     #w_n * mu_n + rest = mu
@@ -85,7 +92,7 @@ for attempt in range(num_attempts):
 
     initial_guess = tf.Variable(initial_value = initial_guess, trainable = True)
 
-    optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=0.01)
     # Optimization loop
 
     prev_loss = 1e6
