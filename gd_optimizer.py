@@ -37,13 +37,13 @@ def risk_proxy(W):
     return 1e5 * sigma_sq(W)
 
 def regularize(W):
-    return 1e-1 * sum(W**2)
+    return 1e2 * sum((abs(w) for w in W))
 
 def allocation_penalty(W):
-    return 1e1 * (1 - sum(W))**2
+    return 1e3 * (1 - sum(W))**2
 
 def weekly_return_penalty(W):
-    return 1e6 * (weekly_return(W) - mu)**2
+    return 1e8 * (weekly_return(W) - mu)**2
 
 def custom_loss(W):
     return risk_proxy(W) + regularize(W) + allocation_penalty(W) + weekly_return_penalty(W)
@@ -54,28 +54,35 @@ minima = []
 
 iter_counts = []
 
-num_attempts = 10
-loss_change_threshold = 0.005 #stop once loss changes by less than 0.5%
-max_num_iterations = 100
+num_attempts = 25
+loss_change_threshold = 1e-5 #stop once loss changes by less than 0.01%
+min_iterations = 10
+max_iterations = 100
 
 rng = np.random.default_rng()
+
+negative_mus = mu_is < 0
+
+negative_mus = negative_mus.flatten()
 
 for attempt in range(num_attempts):
 
     #start by randomly setting n-1 weights
     #normal distribution parameter picker: https://www.desmos.com/calculator/jxzs8fz9qr 
-    initial_guess = rng.normal(loc = 0, scale = 0.15, size = n-1)
+    initial_guess = rng.normal(loc = 1/n, scale = 0.05, size = n-1)
 
-    #change which weight is calculated last because it tends to have the highest magnitude
+    #TODO change which weight is calculated last because it tends to have the highest magnitude
 
     #calculate the value of the last weight in order to satisfy W_i * mu_i = mu
     #w_n * mu_n + rest = mu
+
     w_n = (mu - initial_guess.dot(mu_is[:-1]))/mu_is[-1]
 
     initial_guess = np.append(initial_guess, w_n)
 
-    print(sum(initial_guess), weekly_return(initial_guess))
-    
+    #for the bonus, shorting is not allowed so if the mu < 0 we don't want that stock
+    initial_guess[negative_mus] = 0
+
     initial_guess = tf.Variable(initial_value = initial_guess, trainable = True)
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
@@ -87,7 +94,7 @@ for attempt in range(num_attempts):
 
     #note that loss_change is negative
     #stop optimizing once loss is only improving a little bit or enough iterations have passed
-    while(-loss_change > loss_change_threshold and itr < max_num_iterations):
+    while((-loss_change > loss_change_threshold or itr < min_iterations) and itr < max_iterations):
 
         with tf.GradientTape() as tape:
             loss = custom_loss(initial_guess)
@@ -97,7 +104,7 @@ for attempt in range(num_attempts):
 
         loss = loss.numpy()[0]
 
-        loss_change = (loss-prev_loss) / prev_loss
+        loss_change = (loss - prev_loss) / prev_loss
 
         #print(itr, loss, loss_change)
 
@@ -127,4 +134,4 @@ print("Weekly return penalty:", weekly_return_penalty(abs_min))
 print("Average weekly returns:", weekly_return(abs_min)[0])
 print("Requested weekly return:", mu)
 print("Mean iterations taken per attempt:", mean(iter_counts))
-print("Attempts with max iterations taken:", iter_counts.count(max_num_iterations))
+print("Attempts with max iterations taken:", iter_counts.count(max_iterations))
