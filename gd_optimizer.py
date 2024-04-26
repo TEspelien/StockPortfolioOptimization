@@ -3,11 +3,15 @@ import tensorflow as tf
 from tensorflow.keras import layers, models
 import numpy as np
 
+from sortedcontainers import SortedKeyList
 from statistics import mean
 
 import sys
 
 mu_is = pd.read_csv('mu_is.csv').values
+
+negative_mus = mu_is < 0
+negative_mus = negative_mus.flatten()
 
 variances = pd.read_csv('variances.csv').values
 
@@ -34,7 +38,7 @@ def weekly_return(W):
 # weekly returns as close to target
 
 def risk_proxy(W):
-    return 1e4 * sigma_sq(W)
+    return 1e3 * sigma_sq(W)
 
 def regularize(W):
     penalty = 0
@@ -47,9 +51,9 @@ def regularize(W):
 def allocation_penalty(W):
     s = sum(W)
     if s < 1:
-        return 1e3 * (1-s)**2
+        return 1e5 * (0.999-s)**2
     else:
-        return 1e5 * (s-1)**2
+        return 1e6 * (s-1)**2
 
 def weekly_return_penalty(W):
     return 1e7 * (weekly_return(W) - mu)**2
@@ -57,28 +61,28 @@ def weekly_return_penalty(W):
 def custom_loss(W):
     return risk_proxy(W) + regularize(W) + allocation_penalty(W) + weekly_return_penalty(W)
 
-#pick many different initial points and optimize from each, then pick the best
+#auto sorted list of portfolios, sorted by their loss
+#elements e: [[portfolio], loss]
+p1_minima = SortedKeyList(key = lambda e: e[1])
+p1_minima.add([[], 1e6])
 
-minima = []
+p1_iter_counts = []
 
-iter_counts = []
-
-num_attempts = 25
-loss_change_threshold = 1e-5 #stop once loss changes by less than 0.01%
-min_iterations = 10
-max_iterations = 200
+p1_num_attempts = 1000
+p1_loss_change_threshold = 1e-4 #stop once loss changes by less than 0.01%
+p1_max_iterations = 100
 
 rng = np.random.default_rng()
 
-negative_mus = mu_is < 0
+#phase 1:
 
-negative_mus = negative_mus.flatten()
-
-for attempt in range(num_attempts):
+#pick many different initial points and optimize from each,
+#then pick the best local minima to explore further in phase 2
+for attempt in range(p1_num_attempts):
 
     #start by randomly setting n-1 weights
     #normal distribution parameter picker: https://www.desmos.com/calculator/jxzs8fz9qr 
-    initial_guess = rng.normal(loc = 1/(2*n), scale = 0.1, size = n-1)
+    initial_guess = rng.normal(loc = 1/(2*n), scale = 0.15, size = n-1)
 
     #calculate the value of the last weight in order to satisfy W_i * mu_i = mu
     #w_n * mu_n + rest = mu
@@ -100,8 +104,12 @@ for attempt in range(num_attempts):
     itr = 0
 
     #note that loss_change is negative
-    #stop optimizing once loss is only improving a little bit or enough iterations have passed
-    while((-loss_change > loss_change_threshold or itr < min_iterations) and itr < max_iterations):
+
+    #stopping conditions:
+    #loss improves by less than a given threshold
+    #max number of iterations have passed
+    
+    while -loss_change > p1_loss_change_threshold and itr < p1_max_iterations:
 
         with tf.GradientTape() as tape:
             loss = custom_loss(initial_guess)
@@ -118,27 +126,99 @@ for attempt in range(num_attempts):
         prev_loss = loss
         itr += 1
 
-    minima.append([initial_guess.numpy(), custom_loss(initial_guess.numpy())])
-    iter_counts.append(itr)
-    print(attempt, minima[-1][1], itr)
+        #early stopping: if loss is not good enough by a certain point, dont waste time on this attempt
 
-abs_min = minima[0][0]
-minimized = custom_loss(abs_min)
+        if itr == p1_max_iterations * 0.2 and loss > 3* p1_minima[0][1]:
+            break
 
-for m in minima:
-    if(m[1] < minimized):
-       abs_min = m[0]
-       minimized = m[1]
+    p1_minima.add([initial_guess.numpy(), prev_loss])
+
+    
+    p1_iter_counts.append(itr)
+    print("attempt ", attempt, "loss: ", prev_loss, "itr: ", itr)
 
 
-print("Optimal solution:", abs_min * 100)
-print("Total allocation:", sum(abs_min) * 100)
-print("Final loss:", minimized[0])
-print("Risk proxy:", risk_proxy(abs_min))
-print("Regularization penalty:", regularize(abs_min))
-print("Allocation penalty:", allocation_penalty(abs_min))
-print("Weekly return penalty:", weekly_return_penalty(abs_min))
-print("Average weekly returns:", weekly_return(abs_min)[0])
+#phase 2:
+
+#focus on the best 10% of local minima found in phase 1
+
+p1_minima = p1_minima[:int(p1_num_attempts * 0.1)]
+
+print([e[1] for e in p1_minima])
+
+p1_minima_df = pd.DataFrame(p1_minima)
+
+p1_minima_df.to_csv('p1_minima.csv', index = False)
+
+
+
+p2_minima = SortedKeyList(key = lambda e: e[1])
+p2_minima.add([[], 1e3])
+
+p2_iter_counts = []
+
+p2_loss_change_threshold = 1e-7
+p2_min_iterations = 20
+p2_max_iterations = 1000
+
+print("phase 2")
+
+for idx, local_min in enumerate(p1_minima):
+    
+    start = tf.Variable(initial_value = local_min[0], trainable = True)
+
+    optimizer = tf.keras.optimizers.Adam(learning_rate=0.00001)
+    # Optimization loop
+
+    prev_loss = 1e3
+    loss_change = -1.0
+    itr = 0
+
+    #note that loss_change is negative
+
+    #stopping conditions:
+    #loss improves by less than a given threshold
+    #max number of iterations have passed
+    
+    while (-loss_change > p2_loss_change_threshold or itr < p2_min_iterations) and itr < p2_max_iterations:
+
+        with tf.GradientTape() as tape:
+            loss = custom_loss(start)
+        
+        gradients = tape.gradient(loss, [start])
+        optimizer.apply_gradients(zip(gradients, [start]))
+
+        loss = loss.numpy()[0]
+
+        loss_change = (loss - prev_loss) / prev_loss
+
+        prev_loss = loss
+        itr += 1
+
+        #early stopping: if loss is not good enough by a certain point, dont waste time on this attempt
+
+        if itr == p2_max_iterations * 0.5 and loss > 2 * p2_minima[0][1]:
+            break
+
+    p2_minima.add([start.numpy(), prev_loss])
+
+    
+    p2_iter_counts.append(itr)
+    print("local minima ", idx, "loss: ", prev_loss, "itr: ", itr)
+
+
+optimal = p2_minima[0][0]
+
+
+print("Optimal solution:", optimal * 100)
+print("Total allocation:", sum(optimal) * 100)
+print("Final loss:", p2_minima[0][1])
+print("Risk proxy:", risk_proxy(optimal))
+print("Regularization penalty:", regularize(optimal))
+print("Allocation penalty:", allocation_penalty(optimal))
+print("Weekly return penalty:", weekly_return_penalty(optimal))
+print("Average weekly returns:", weekly_return(optimal))
 print("Requested weekly return:", mu)
-print("Mean iterations taken per attempt:", mean(iter_counts))
-print("Attempts with max iterations taken:", iter_counts.count(max_iterations))
+print("Phase 1 statistics:")
+print("Mean iterations used:", mean(p1_iter_counts))
+print("Attempts with max iterations used:", p1_iter_counts.count(p1_max_iterations))
