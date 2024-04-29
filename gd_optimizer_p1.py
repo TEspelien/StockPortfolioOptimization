@@ -51,7 +51,7 @@ def allocation_penalty(W):
         return 1e6 * (s-1)**2
 
 def regularize(W):
-    return sum([1e5 * w**2 for w in W if w < 0])
+    return sum([1e6 * w**2 for w in W if w < 0])
 
 def custom_loss(W):
     return risk_proxy(W) + regularize(W) + allocation_penalty(W) + weekly_return_penalty(W)
@@ -63,13 +63,11 @@ p1_minima.add([[], 1e6])
 
 p1_iter_counts = []
 
-p1_num_attempts = 1000
-p1_loss_change_threshold = 1e-4 #stop once loss changes by less than 0.01%
-p1_max_iterations = 100
+p1_num_attempts = 10
+p1_loss_change_threshold = 1e-3 #stop once loss changes by less than 0.01%
+p1_max_iterations = 200
 
 rng = np.random.default_rng()
-
-#phase 1:
 
 #pick many different initial points and optimize from each,
 #then pick the best local minima to explore further in phase 2
@@ -91,20 +89,14 @@ for attempt in range(p1_num_attempts):
 
     initial_guess = tf.Variable(initial_value = initial_guess, trainable = True)
 
-    optimizer = tf.keras.optimizers.Adam(learning_rate=0.01)
-    # Optimization loop
-
-    prev_loss = 1e6
-    loss_change = -1.0
+    optimizer = tf.keras.optimizers.SGD(learning_rate=0.00005, momentum = 0.8, clipvalue = 1.0)
+    
+    prev_loss = 1e7
     itr = 0
 
-    #note that loss_change is negative
-
-    #stopping conditions:
-    #loss improves by less than a given threshold
-    #max number of iterations have passed
+    # Optimization loop
     
-    while -loss_change > p1_loss_change_threshold and itr < p1_max_iterations:
+    while itr < p1_max_iterations:
 
         with tf.GradientTape() as tape:
             loss = custom_loss(initial_guess)
@@ -119,21 +111,26 @@ for attempt in range(p1_num_attempts):
         #print(itr, loss, loss_change)
 
         prev_loss = loss
-        itr += 1
 
         #early stopping: if loss is not good enough by a certain point, dont waste time on this attempt
 
-        if itr == p1_max_iterations * 0.3 and loss > 3* p1_minima[0][1]:
+        if itr == 60 and loss > 1000 * p1_minima[0][1]:
             break
+
+        if itr == 120 and loss > 100 * p1_minima[0][1]:
+            break
+
+        if itr >= 180 and abs(loss_change) > p1_loss_change_threshold:
+            break;
+
+        itr += 1;
+
 
     p1_minima.add([initial_guess.numpy(), prev_loss])
 
     
     p1_iter_counts.append(itr)
     print("attempt ", attempt, "loss: ", prev_loss, "itr: ", itr)
-
-
-#phase 2:
 
 #focus on the best 10% of local minima found in phase 1
 
@@ -144,6 +141,19 @@ p1_minima = p1_minima[:int(p1_num_attempts * 0.1)]
 p1_minima_df = pd.DataFrame(data = [np.append(e[0], e[1]) for e in p1_minima], columns = ['x1', 'x2', 'x3', 'x4', 'x5', 'loss'])
 
 p1_minima_df.to_csv('p1_minima.csv', index = False)
+
+optimal = p1_minima[0][0]
+
+
+print("Optimal solution:", optimal * 100)
+print("Total allocation:", sum(optimal) * 100)
+print("Final loss:", p1_minima[0][1])
+print("Risk proxy:", risk_proxy(optimal))
+print("Regularization penalty:", regularize(optimal))
+print("Allocation penalty:", allocation_penalty(optimal))
+print("Weekly return penalty:", weekly_return_penalty(optimal))
+print("Average weekly returns:", weekly_return(optimal))
+print("Requested weekly return:", mu)
 
 print("Phase 1 statistics:")
 print("Mean iterations used:", mean(p1_iter_counts))

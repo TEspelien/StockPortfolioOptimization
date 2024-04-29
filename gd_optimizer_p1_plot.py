@@ -66,8 +66,6 @@ rng = np.random.default_rng()
 
 curves = []
 
-#phase 1:
-
 #pick many different initial points and optimize from each,
 #then pick the best local minima to explore further in phase 2
 for attempt in range(p1_num_attempts):
@@ -89,19 +87,13 @@ for attempt in range(p1_num_attempts):
     initial_guess = tf.Variable(initial_value = initial_guess, trainable = True)
 
     optimizer = tf.keras.optimizers.SGD(learning_rate=0.00005, momentum = 0.8, clipvalue = 1.0)
-    # Optimization loop
 
     prev_loss = 1e6
-    loss_change = -1.0
     itr = 0
 
     curve = []
 
-    #note that loss_change is negative
-
-    #stopping conditions:
-    #loss improves by less than a given threshold
-    #max number of iterations have passed
+    # Optimization loop
     
     while itr < p1_max_iterations:
 
