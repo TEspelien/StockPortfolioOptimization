@@ -22,7 +22,7 @@ arguments = sys.argv[1:]
 if len(arguments) > 0:
     mus = [float(arguments[0])]
 else:
-    mus = [0.02, 0.025]
+    mus = [0.005, 0.01, 0.015, 0.02, 0.025]
 
 # the variance of the function given weights W and variances previously calculated
 def sigma_sq(W):
@@ -58,7 +58,7 @@ def custom_loss(W, mu):
 
 p1_iter_counts = []
 
-p1_num_attempts = 20
+p1_num_attempts = 100
 p1_loss_change_threshold = 1e-3 #stop once loss changes by less than 0.01%
 p1_max_iterations = 200
 
