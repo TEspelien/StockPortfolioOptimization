@@ -16,7 +16,7 @@ tickers = ["NVDA", "JPM", "LLY", "GE", "GBTC"]
 def sigma_sq(W):
     return sum(W[i] * W[j] * variances[i, j] for i in range(n) for j in range(n))
 
-data['risk'] = data.apply(lambda row: sigma_sq(row[1:6]), axis = 1)
+data['risk'] = data.apply(lambda row: sigma_sq(row[1:6])/1e4, axis = 1)
 
 print(data)
 
@@ -25,7 +25,7 @@ ax = data.plot.line(x='mu', y='risk',
 
 # Add labels and legend
 ax.set_xlabel('Weekly Returns (%)')
-ax.set_ylabel('Risk')
+ax.set_ylabel('Sigma Squared')
 ax.set_title('Portfolio Risk for Increasing Weekly Returns')
 
 # Show the plot
