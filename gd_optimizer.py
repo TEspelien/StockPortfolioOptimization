@@ -22,7 +22,7 @@ arguments = sys.argv[1:]
 if len(arguments) > 0:
     mus = [float(arguments[0])]
 else:
-    mus = [0.005, 0.01, 0.015, 0.02, 0.025]
+    mus = [m/10000.0 for m in range(50, 275, 25)]
 
 # the variance of the function given weights W and variances previously calculated
 def sigma_sq(W):
@@ -41,7 +41,10 @@ def risk_proxy(W):
     return 1e3 * sigma_sq(W)
 
 def weekly_return_penalty(W, mu):
-    return 1e7 * (weekly_return(W) - mu)**2
+    d = weekly_return(W) - mu
+    if d < 0:
+        return 1e7 * d**2
+    return 0
 
 def allocation_penalty(W):
     s = sum(W)
@@ -58,9 +61,9 @@ def custom_loss(W, mu):
 
 p1_iter_counts = []
 
-p1_num_attempts = 100
+p1_num_attempts = 200
 p1_loss_change_threshold = 1e-3 #stop once loss changes by less than 0.01%
-p1_max_iterations = 200
+p1_max_iterations = 250
 
 rng = np.random.default_rng()
 
@@ -108,7 +111,7 @@ for mu in mus:
             gradients = tape.gradient(loss, [initial_guess])
             optimizer.apply_gradients(zip(gradients, [initial_guess]))
 
-            loss = loss.numpy()[0]
+            loss = loss.numpy()
 
             loss_change = (loss - prev_loss) / prev_loss
 
@@ -118,10 +121,10 @@ for mu in mus:
 
             #early stopping: if loss is not good enough by a certain point, dont waste time on this attempt
 
-            if itr == 60 and loss > 1000 * p1_minima[0][1]:
+            if itr == 75 and loss > 1000 * p1_minima[0][1]:
                 break
 
-            if itr == 120 and loss > 100 * p1_minima[0][1]:
+            if itr == 125 and loss > 100 * p1_minima[0][1]:
                 break
 
             if itr >= 180 and abs(loss_change) > p1_loss_change_threshold:
@@ -148,7 +151,7 @@ for mu in mus:
 
     optimal = p1_minima[0][0]
 
-    solution = [mu] + [100 * x for x in optimal]
+    solution = [mu*100] + [100 * x for x in optimal]
 
     print(solution)
 
