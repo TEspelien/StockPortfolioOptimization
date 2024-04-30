@@ -29,7 +29,7 @@ def sigma_sq(W):
     return sum(W[i] * W[j] * variances[i, j] for i in range(n) for j in range(n))
 
 def weekly_return(W):
-    return np.dot(W, mu_is)
+    return np.dot(W, mu_is).item()
 
 # function to optimize:
 # sigma_sq(W) with penalties
@@ -48,10 +48,9 @@ def weekly_return_penalty(W, mu):
 
 def allocation_penalty(W):
     s = sum(W)
-    if s < 1:
-        return 1e5 * (0.999-s)**2
-    else:
+    if s > 1:
         return 1e7 * (s-1)**2
+    return 0
 
 def regularize(W):
     return sum([1e6 * w**2 for w in W if w < 0])
@@ -61,8 +60,8 @@ def custom_loss(W, mu):
 
 p1_iter_counts = []
 
-p1_num_attempts = 200
-p1_loss_change_threshold = 1e-3 #stop once loss changes by less than 0.01%
+p1_num_attempts = 100
+p1_loss_change_threshold = 1e-3 #stop once loss changes by less than 0.1%
 p1_max_iterations = 250
 
 rng = np.random.default_rng()
@@ -82,7 +81,7 @@ for mu in mus:
 
         #start by randomly setting n-1 weights
         #normal distribution parameter picker: https://www.desmos.com/calculator/jxzs8fz9qr 
-        initial_guess = rng.normal(loc = 0.2, scale = 0.15, size = n-1)
+        initial_guess = rng.normal(loc = 0.1, scale = 0.05, size = n-1)
 
         #calculate the value of the last weight in order to satisfy W_i * mu_i = mu
         #w_n * mu_n + rest = mu
@@ -127,7 +126,7 @@ for mu in mus:
             if itr == 125 and loss > 100 * p1_minima[0][1]:
                 break
 
-            if itr >= 180 and abs(loss_change) > p1_loss_change_threshold:
+            if itr >= 50 and abs(loss_change) > p1_loss_change_threshold:
                 break;
 
             itr += 1;
@@ -153,7 +152,7 @@ for mu in mus:
 
     solution = [mu*100] + [100 * x for x in optimal]
 
-    print(solution)
+    #print(solution)
 
     solutions.append(solution)
 
@@ -173,4 +172,10 @@ for s in solutions:
     print(s)
 
 solutions_df = pd.DataFrame(data = solutions, columns = ['mu', 'x1', 'x2', 'x3', 'x4', 'x5'])
-solutions_df.to_csv('solutions.csv', index = False)
+
+if len(mus) == 1:
+    solutions_path = f"solutions{mus[0]*100}.csv"
+else:
+    solutions_path = "solutions.csv"
+
+solutions_df.to_csv(solutions_path, index = False)
