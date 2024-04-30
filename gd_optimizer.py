@@ -43,7 +43,7 @@ def risk_proxy(W):
 def weekly_return_penalty(W, mu):
     d = weekly_return(W) - mu
     if d < 0:
-        return 1e7 * d**2
+        return 1e9 * d**2
     return 0
 
 def allocation_penalty(W):
@@ -53,7 +53,7 @@ def allocation_penalty(W):
     return 0
 
 def regularize(W):
-    return sum([1e6 * w**2 for w in W if w < 0])
+    return sum([1e7 * w**2 for w in W if w < 0])
 
 def custom_loss(W, mu):
     return risk_proxy(W) + regularize(W) + allocation_penalty(W) + weekly_return_penalty(W, mu)
@@ -62,7 +62,7 @@ p1_iter_counts = []
 
 p1_num_attempts = 100
 p1_loss_change_threshold = 1e-3 #stop once loss changes by less than 0.1%
-p1_max_iterations = 250
+p1_max_iterations = 200
 
 rng = np.random.default_rng()
 
@@ -92,6 +92,9 @@ for mu in mus:
 
         #for the bonus, shorting is not allowed so if the mu < 0 we don't want that stock
         initial_guess[negative_mus] = 0
+
+        #for the 2.5% case, ignore portfolios that include stocks besides the top two performers
+        #initial_guess[[1, 2, 3]] = 0
 
         initial_guess = tf.Variable(initial_value = initial_guess, trainable = True)
 
@@ -126,7 +129,7 @@ for mu in mus:
             if itr == 125 and loss > 100 * p1_minima[0][1]:
                 break
 
-            if itr >= 50 and abs(loss_change) > p1_loss_change_threshold:
+            if itr >= 75 and abs(loss_change) > p1_loss_change_threshold:
                 break;
 
             itr += 1;
